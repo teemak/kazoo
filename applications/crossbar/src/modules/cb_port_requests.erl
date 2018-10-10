@@ -18,13 +18,13 @@
         ,validate/1, validate/2, validate/3, validate/4
         ,get/3
         ,put/1, put/3
-        ,patch/3
+        ,patch/3, patch/2
         ,post/2, post/4
         ,delete/2, delete/4
         ,authority/1
 
         ,acceptable_content_types/0
-
+        ,validate_request/2
         ]).
 
 -include("crossbar.hrl").
@@ -129,7 +129,7 @@ allowed_methods(?PORT_CANCELED) ->
 allowed_methods(?PORT_UNCONFIRMED) ->
     [?HTTP_GET];
 allowed_methods(_PortRequestId) ->
-    [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
+    [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_PortRequestId, ?PORT_SUBMITTED) ->
@@ -306,6 +306,12 @@ validate(Context, Id, ?PATH_TOKEN_TIMELINE) ->
 validate(Context, Id, ?PORT_ATTACHMENT, AttachmentId) ->
     validate_attachment(Context, Id, AttachmentId, cb_context:req_verb(Context)).
 
+-spec validate_patch(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
+validate_patch(PortId, Context) ->
+    ValidateFun = fun (_PortId, C) -> cb_context:validate_request_data(?SCHEMA, C) end,
+    Context1 = cb_context:set_account_db(Context, ?KZ_PORT_REQUESTS_DB),
+    crossbar_doc:patch_and_validate(PortId, Context1, ValidateFun).
+
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -350,6 +356,10 @@ save(Context) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
+-spec patch(cb_context:context(), path_token()) -> cb_context:context().
+patch(Context, Id) ->
+    post(Context, Id).
+
 -spec patch(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 patch(Context, Id, NewState=?PORT_SUBMITTED) ->
     save_then_maybe_notify(Context, Id, NewState);
@@ -483,6 +493,8 @@ validate_port_request(Context, Id, ?HTTP_GET) ->
     read(Context, Id);
 validate_port_request(Context, Id, ?HTTP_POST) ->
     update(Context, Id);
+validate_port_request(Context, Id, ?HTTP_PATCH) ->
+    validate_patch(Id, Context);
 validate_port_request(Context, Id, ?HTTP_DELETE) ->
     is_deletable(load_port_request(Context, Id)).
 
@@ -511,6 +523,9 @@ patch_then_validate_then_maybe_transition(Context, PortId, ToState) ->
     Context1 = cb_context:set_account_db(Context, ?KZ_PORT_REQUESTS_DB),
     LoadOptions = ?TYPE_CHECK_OPTION(?TYPE_PORT_REQUEST),
     crossbar_doc:patch_and_validate(PortId, Context1, ValidateFun, LoadOptions).
+
+-spec validate_request(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
+validate_request(_PortId, Context) -> Context.
 
 %%------------------------------------------------------------------------------
 %% @doc
