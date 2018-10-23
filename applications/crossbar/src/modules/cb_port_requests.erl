@@ -55,6 +55,8 @@
 
 -define(REQ_TRANSITION, <<"reason">>).
 
+-define(SUBMIT_TO_CARRIER, <<"submit">>).
+
 %%%=============================================================================
 %%% API
 %%%=============================================================================
@@ -327,9 +329,7 @@ get(Context, Id, ?PATH_TOKEN_LOA) ->
 %%------------------------------------------------------------------------------
 
 -spec put(cb_context:context()) -> cb_context:context().
-put(Context) ->
-    Context2 = save(Context),
-    phonebook:maybe_create_port_in(Context2).
+put(Context) -> save(Context).
 
 -spec put(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 put(Context, Id, ?PORT_ATTACHMENT) ->
@@ -362,7 +362,13 @@ patch(Context, Id) ->
 
 -spec patch(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 patch(Context, Id, NewState=?PORT_SUBMITTED) ->
-    save_then_maybe_notify(Context, Id, NewState);
+    Context1 = crossbar_doc:load(Context, Id),
+    case phonebook:maybe_create_port_in(Context1) of
+        'ok' ->
+            save_then_maybe_notify(Context, Id, NewState);
+        {'error', Reason} ->
+            cb_context:add_system_error('datastore_fault', Reason, Context1)
+    end;
 patch(Context, Id, NewState=?PORT_PENDING) ->
     save_then_maybe_notify(Context, Id, NewState);
 patch(Context, Id, NewState=?PORT_SCHEDULED) ->
@@ -378,9 +384,9 @@ patch(Context, Id, NewState=?PORT_CANCELED) ->
 -spec save_then_maybe_notify(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
 save_then_maybe_notify(Context, PortId, NewState) ->
     Context1 = save(Context),
-    case success =:= cb_context:resp_status(Context1) of
-        false -> Context1;
-        true ->
+    case 'success' =:= cb_context:resp_status(Context1) of
+        'false' -> Context1;
+        'true' ->
             RespData1 = knm_port_request:public_fields(cb_context:doc(Context1)),
             RespData = filter_private_comments(Context1, RespData1),
             Context2 = cb_context:set_resp_data(Context1, RespData),
@@ -986,6 +992,16 @@ successful_validation(Context, _Id) ->
     Normalized = knm_port_request:normalize_numbers(cb_context:doc(Context)),
     cb_context:set_doc(Context, Normalized).
 
+
+-spec fetch_by_number(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+fetch_by_number(Context, Number) ->
+    Options = [{'keymap', Number}
+              ,{'databases', [?KZ_PORT_REQUESTS_DB]}
+              ,{'unchunkable', 'true'}
+              ,{'should_paginate', 'false'}
+              ],
+    crossbar_view:load(Context, ?PORT_REQ_NUMBERS, Options).
+
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -998,21 +1014,10 @@ check_number_portability(PortId, Number, Context) ->
     Context1 = fetch_by_number(Context, E164),
     case cb_context:resp_status(Context1) of
         'success' ->
-            DataResp = cb_context:resp_data(Context1),
-            check_number_portability(PortId, Number, Context1, E164, DataResp);
+             DataResp = cb_context:resp_data(Context1),
+             check_number_portability(PortId, Number, Context1, E164, DataResp);
         _ -> Context1
     end.
-
--spec fetch_by_number(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
-fetch_by_number(Context, Number) ->
-    Options = [{'mapper', fun normalize_view_results/2}
-              ,{'keymap', Number}
-              ,{'databases', [?KZ_PORT_REQUESTS_DB]}
-              ,{'unchunkable', 'true'}
-              ,{'should_paginate', 'false'}
-              ,'include_docs'
-              ],
-    crossbar_view:load(Context, ?PORT_REQ_NUMBERS, Options).
 
 -spec check_number_portability(kz_term:api_binary(), kz_term:ne_binary(), cb_context:context(), kz_term:ne_binary(), kz_json:objects()) ->
                                       cb_context:context().
