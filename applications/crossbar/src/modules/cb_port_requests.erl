@@ -1014,8 +1014,8 @@ check_number_portability(PortId, Number, Context) ->
     Context1 = fetch_by_number(Context, E164),
     case cb_context:resp_status(Context1) of
         'success' ->
-             DataResp = cb_context:resp_data(Context1),
-             check_number_portability(PortId, Number, Context1, E164, DataResp);
+            DataResp = cb_context:resp_data(Context1),
+            check_number_portability(PortId, Number, Context1, E164, DataResp);
         _ -> Context1
     end.
 
