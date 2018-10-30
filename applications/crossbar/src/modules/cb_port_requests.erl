@@ -362,7 +362,7 @@ patch(Context, Id) ->
 
 -spec patch(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 patch(Context, Id, NewState=?PORT_SUBMITTED) ->
-    Context1 = crossbar_doc:load(Id, Context),
+    Context1 = load_port_request(Id, Context),
     case phonebook:maybe_create_port_in(Context1) of
         'ok' ->
             save_then_maybe_notify(Context, Id, NewState);
