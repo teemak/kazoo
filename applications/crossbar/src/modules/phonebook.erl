@@ -24,9 +24,8 @@
 maybe_create_port_in(Context) ->
     case should_send_to_phonebook(Context) of
         'true' ->
-            create_port_in(cb_context:doc(Context), cb_context:auth_token(Context)),
-            Context;
-        'false' -> Context
+            create_port_in(cb_context:doc(Context), cb_context:auth_token(Context));
+        'false' -> 'ok'
     end.
 
 -spec maybe_add_comment(cb_context:context(), kz_json:object()) -> cb_context:context().
