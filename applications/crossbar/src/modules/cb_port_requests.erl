@@ -22,7 +22,6 @@
         ,post/2, post/4
         ,delete/2, delete/4
         ,authority/1
-
         ,acceptable_content_types/0
         ,validate_request/2
         ]).
@@ -791,25 +790,37 @@ get_account_names(Keys) ->
 %%------------------------------------------------------------------------------
 -spec load_summary_by_number(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 load_summary_by_number(Context, Number) ->
-    Options = [{'keys', build_keys(Context, Number)}
+    E164 = knm_converters:normalize(Number),
+    case props:get_value(<<"accounts">>, cb_context:req_nouns(Context)) of
+        [AccountId] ->
+            load_account_summary_by_number(Context, [[AccountId, E164]]);
+        [AccountId, ?PORT_DESCENDANTS] ->
+            load_account_summary_by_number(Context, lists:reverse(
+                                                      [[AnAccountId, E164]
+                                                       || AnAccountId <- kapps_util:account_descendants(AccountId)
+                                                      ]));
+        _ -> load_global_summary_by_number(Context, E164)
+    end.
+
+-spec load_global_summary_by_number(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+load_global_summary_by_number(Context, Number) ->
+    load_summary(Context, {'keymap', Number}, ?PORT_REQ_NUMBERS).
+
+-spec load_account_summary_by_number(cb_context:context(), kz_term:proplist()) -> cb_context:context().
+load_account_summary_by_number(Context, Keys) ->
+    load_summary(Context, {'keys', Keys}, ?ALL_PORT_REQ_NUMBERS).
+
+-spec load_summary(cb_context:context()
+                  ,{'keymap'|'keys', kz_term:ne_binary()}
+                  ,kz_term:ne_binary()
+                  ) -> cb_context:context().
+load_summary(Context, Key, View) ->
+    Options = [Key
               ,{'mapper', fun normalize_view_results/2}
               ,{'databases', [?KZ_PORT_REQUESTS_DB]}
               ,'include_docs'
               ],
-    crossbar_view:load(Context, ?ALL_PORT_REQ_NUMBERS, Options).
-
--spec build_keys(cb_context:context(), kz_term:ne_binary()) -> [kz_term:ne_binaries()].
-build_keys(Context, Number) ->
-    E164 = knm_converters:normalize(Number),
-    case props:get_value(<<"accounts">>, cb_context:req_nouns(Context)) of
-        [AccountId] ->
-            [[AccountId, E164]];
-        [AccountId, ?PORT_DESCENDANTS] ->
-            lists:reverse(
-              [[AnAccountId, E164]
-               || AnAccountId <- kapps_util:account_descendants(AccountId)
-              ])
-    end.
+    crossbar_view:load(Context, View, Options).
 
 %%%=============================================================================
 %%% Load Last Submitted
